@@ -2,8 +2,17 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { LayoutDashboard, FileText, Upload, BarChart3, LogOut, Plus, Leaf, Lock, Clock, CheckCircle, X, Truck } from 'lucide-react'
+import { 
+  LayoutDashboard, 
+  List, 
+  FileText, 
+  BarChart, 
+  LogOut, 
+  Plus, 
+  CheckCircle, 
+  Lock, 
+  Trash2 
+} from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -12,68 +21,59 @@ const supabase = createClient(
 
 export default function Dashboard() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [orgName, setOrgName] = useState('Institution')
-  
-  // Data State
+  const [stats, setStats] = useState({
+    total: 0,
+    submitted: 0,
+    locked: 0,
+    pending: 0
+  })
   const [activities, setActivities] = useState([])
-  const [stats, setStats] = useState({ total: 0, submitted: 0, locked: 0, pending: 0 })
-
-  // Popup State
-  const [selectedActivity, setSelectedActivity] = useState(null)
-  const [otp, setOtp] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [orgName, setOrgName] = useState('')
 
   useEffect(() => {
-    async function loadDashboard() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('org_name')
-        .eq('id', user.id)
-        .single()
-      if (profile) setOrgName(profile.org_name)
-
-      // Fetch Activities
-      const { data: activityData } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('institution_id', user.id)
-        .order('date', { ascending: false })
-
-      if (activityData) {
-        setActivities(activityData)
-        
-        // Calculate Stats
-        const total = activityData.length
-        const submitted = activityData.filter(a => a.status === 'submitted').length
-        const locked = activityData.filter(a => a.status === 'locked').length
-        const pending = activityData.filter(a => a.status === 'submitted' && a.pickup_required).length
-
-        setStats({ total, submitted, locked, pending })
-      }
-      setLoading(false)
-    }
-    loadDashboard()
+    checkUser()
+    fetchDashboardData()
   }, [])
 
-  const handleViewDetails = async (activity) => {
-    setSelectedActivity(activity)
-    setOtp(null) 
-
-    if (activity.pickup_required && activity.status === 'submitted') {
-      const { data: wasteData } = await supabase
-        .from('waste_logs')
-        .select('otp_code')
-        .eq('activity_id', activity.id)
-        .single()
+  async function checkUser() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) router.push('/login')
       
-      if (wasteData) setOtp(wasteData.otp_code)
+    // Get Org Name
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('org_name')
+      .eq('id', user?.id)
+      .single()
+    
+    if (profile) setOrgName(profile.org_name)
+  }
+
+  async function fetchDashboardData() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // 1. Get Activities
+    const { data: acts, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('institution_id', user.id)
+      .order('date', { ascending: false })
+
+    if (error) console.error('Error fetching data:', error)
+    else {
+      setActivities(acts)
+      
+      // 2. Calculate Stats
+      const total = acts.length
+      const submitted = acts.filter(a => a.status === 'submitted').length
+      const locked = acts.filter(a => a.status === 'locked').length
+      const pending = acts.filter(a => a.status === 'pending_verification' || a.status === 'submitted').length
+
+      setStats({ total, submitted, locked, pending })
     }
+    setLoading(false)
   }
 
   const handleLogout = async () => {
@@ -81,187 +81,189 @@ export default function Dashboard() {
     router.push('/login')
   }
 
-  if (loading) return <div className="p-10 text-center">Loading Dashboard...</div>
-
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-100 font-sans">
       
-      {/* SIDEBAR */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center text-green-700 font-bold text-xl">
-            <Leaf className="mr-2 h-6 w-6" /> EcoTrace
+      {/* --- SIDEBAR --- */}
+      <aside className="w-64 bg-gray-900 text-white flex flex-col hidden md:flex">
+        <div className="p-6 text-2xl font-bold flex items-center space-x-2">
+          <div className="h-8 w-8 bg-green-500 rounded-full flex items-center justify-center text-white">
+             E
           </div>
-          <p className="text-xs text-gray-400 mt-1">Compliance Platform</p>
+          <span>EcoTrace</span>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
-          <div className="flex items-center p-3 bg-green-50 text-green-700 rounded-lg cursor-pointer">
-            <LayoutDashboard className="h-5 w-5 mr-3" />
-            <span className="font-medium">Dashboard</span>
-          </div>
-          <div className="flex items-center p-3 text-gray-600 hover:bg-gray-50 rounded-lg cursor-pointer">
-            <FileText className="h-5 w-5 mr-3" />
-            <span className="font-medium">Activities</span>
-          </div>
+        <nav className="flex-1 px-4 space-y-2 mt-4">
+          
+          {/* Dashboard (Active) */}
+          <button className="flex items-center space-x-3 text-white bg-green-700 w-full p-3 rounded-lg shadow-md transition">
+            <LayoutDashboard className="h-5 w-5" />
+            <span>Dashboard</span>
+          </button>
+
+          {/* Create Activity */}
+          <button 
+            onClick={() => router.push('/dashboard/create')}
+            className="flex items-center space-x-3 text-gray-300 hover:text-white hover:bg-gray-800 w-full p-3 rounded-lg transition"
+          >
+            <List className="h-5 w-5" />
+            <span>Activities</span>
+          </button>
+
+          {/* Documents */}
+          <button 
+            onClick={() => router.push('/dashboard/documents')}
+            className="flex items-center space-x-3 text-gray-300 hover:text-white hover:bg-gray-800 w-full p-3 rounded-lg transition"
+          >
+            <FileText className="h-5 w-5" />
+            <span>Documents</span>
+          </button>
+
+          {/* Reports */}
+          <button 
+            onClick={() => router.push('/dashboard/reports')}
+            className="flex items-center space-x-3 text-gray-300 hover:text-white hover:bg-gray-800 w-full p-3 rounded-lg transition"
+          >
+            <BarChart className="h-5 w-5" />
+            <span>Reports</span>
+          </button>
+
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
-          <button onClick={handleLogout} className="flex items-center w-full p-3 text-red-600 hover:bg-red-50 rounded-lg transition">
-            <LogOut className="h-5 w-5 mr-3" />
-            <span className="font-medium">Sign Out</span>
+        <div className="p-4 border-t border-gray-800">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center space-x-3 text-red-400 hover:text-red-300 w-full p-3 rounded-lg transition"
+          >
+            <LogOut className="h-5 w-5" />
+            <span>Sign Out</span>
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 overflow-y-auto relative">
-        <header className="bg-white shadow-sm p-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Welcome, {orgName}</h1>
-            <p className="text-gray-500 text-sm">Here is your sustainability overview</p>
+      {/* --- MAIN CONTENT --- */}
+      <main className="flex-1 overflow-y-auto">
+        
+        {/* Top Header */}
+        <header className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-10">
+          <h2 className="text-xl font-bold text-gray-800">Institution Dashboard</h2>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <div className="text-sm font-bold text-gray-900">{orgName || 'Loading...'}</div>
+              <div className="text-xs text-gray-500">Institution Account</div>
+            </div>
+            <div className="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+              {orgName.charAt(0) || 'U'}
+            </div>
           </div>
-          
-          <Link href="/create-activity">
-            <button className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg flex items-center shadow-md transition">
-              <Plus className="h-4 w-4 mr-2" />
-              Request Pickup
-            </button>
-          </Link>
         </header>
 
-        {/* Stats Grid */}
-        <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="text-gray-400 text-sm font-medium uppercase">Total Activities</div>
-            <div className="text-3xl font-bold text-gray-900 mt-2">{stats.total}</div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="text-gray-400 text-sm font-medium uppercase">Submitted</div>
-            <div className="text-3xl font-bold text-blue-600 mt-2">{stats.submitted}</div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="text-gray-400 text-sm font-medium uppercase">Locked (Verified)</div>
-            <div className="text-3xl font-bold text-green-600 mt-2">{stats.locked}</div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="text-gray-400 text-sm font-medium uppercase">Pending Waste</div>
-            <div className="text-3xl font-bold text-yellow-600 mt-2">{stats.pending}</div>
-          </div>
-        </div>
-
-        {/* Activity Table */}
-        <div className="p-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-bold text-gray-800">Recent Activities</h3>
+        <div className="p-8 max-w-7xl mx-auto">
+          
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {/* Total */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+              <div>
+                <div className="text-gray-500 text-xs font-bold uppercase">Total Activities</div>
+                <div className="text-3xl font-bold text-gray-900 mt-1">{stats.total}</div>
+              </div>
+              <div className="p-3 bg-green-50 rounded-full text-green-600">
+                <List className="h-6 w-6" />
+              </div>
             </div>
-            
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                <tr>
-                  <th className="px-6 py-3">Activity Type</th>
-                  <th className="px-6 py-3">Date</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {activities.length === 0 ? (
+
+            {/* Submitted */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+              <div>
+                <div className="text-gray-500 text-xs font-bold uppercase">Submitted</div>
+                <div className="text-3xl font-bold text-gray-900 mt-1">{stats.submitted}</div>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-full text-blue-600">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+            </div>
+
+            {/* Locked */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+              <div>
+                <div className="text-gray-500 text-xs font-bold uppercase">Locked</div>
+                <div className="text-3xl font-bold text-gray-900 mt-1">{stats.locked}</div>
+              </div>
+              <div className="p-3 bg-gray-100 rounded-full text-gray-600">
+                <Lock className="h-6 w-6" />
+              </div>
+            </div>
+
+            {/* Pending */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+              <div>
+                <div className="text-gray-500 text-xs font-bold uppercase">Pending Actions</div>
+                <div className="text-3xl font-bold text-gray-900 mt-1">{stats.pending}</div>
+              </div>
+              <div className="p-3 bg-yellow-50 rounded-full text-yellow-600">
+                <Trash2 className="h-6 w-6" />
+              </div>
+            </div>
+          </div>
+
+          {/* Activity List Section */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-800">Recent Activities</h3>
+              <button 
+                onClick={() => router.push('/dashboard/create')}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium transition"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Activity
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic">
-                      No requests yet. Click "Request Pickup" to start.
-                    </td>
+                    <th className="p-4">Activity Type</th>
+                    <th className="p-4">Description</th>
+                    <th className="p-4">Date</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Action</th>
                   </tr>
-                ) : (
-                  activities.map((act) => (
-                    <tr key={act.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">{act.type}</td>
-                      <td className="px-6 py-4 text-gray-600">{act.date}</td>
-                      <td className="px-6 py-4">
-                        {act.status === 'locked' && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1"/> Verified</span>}
-                        {act.status === 'submitted' && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><Clock className="w-3 h-3 mr-1"/> Pending Pickup</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button 
-                          onClick={() => handleViewDetails(act)}
-                          className="text-green-600 hover:text-green-900 text-sm font-medium"
-                        >
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* POPUP MODAL */}
-        {selectedActivity && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-              <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-bold text-gray-800">Activity Details</h3>
-                <button onClick={() => setSelectedActivity(null)} className="text-gray-400 hover:text-gray-600">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <div className="p-6">
-                <div className="mb-4">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Waste Type</span>
-                  <p className="text-lg font-medium text-gray-900">{selectedActivity.type}</p>
-                </div>
-                
-                <div className="mb-6">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Description</span>
-                  <p className="text-gray-600 mt-1">{selectedActivity.description}</p>
-                </div>
-
-                {selectedActivity.evidence_url && (
-                  <div className="mb-6">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Photo Evidence</span>
-                    <img src={selectedActivity.evidence_url} alt="Waste" className="mt-2 w-full h-40 object-cover rounded-lg border border-gray-200"/>
-                  </div>
-                )}
-
-                {selectedActivity.pickup_required && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                    <Truck className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="text-sm font-bold text-green-800 mb-1">Waste Pickup Verification</h4>
-                    
-                    {selectedActivity.status === 'submitted' ? (
-                      <div>
-                        <p className="text-xs text-green-600 mb-2">Show this code to the pickup handler:</p>
-                        <div className="text-3xl font-mono font-bold text-gray-900 tracking-widest bg-white py-2 rounded border border-green-200">
-                          {otp || "Loading..."}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center text-green-700 font-bold">
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                        Verified & Collected
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              <div className="bg-gray-50 p-4 text-right">
-                <button 
-                  onClick={() => setSelectedActivity(null)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition"
-                >
-                  Close
-                </button>
-              </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {loading ? (
+                    <tr><td colSpan="5" className="p-6 text-center text-gray-500">Loading activities...</td></tr>
+                  ) : activities.length === 0 ? (
+                    <tr><td colSpan="5" className="p-6 text-center text-gray-500">No activities found. Create one!</td></tr>
+                  ) : (
+                    activities.map((act) => (
+                      <tr key={act.id} className="hover:bg-gray-50 transition">
+                        <td className="p-4 font-bold text-gray-800">{act.type}</td>
+                        <td className="p-4 text-gray-600 truncate max-w-xs">{act.description}</td>
+                        <td className="p-4 text-gray-500">{new Date(act.date).toLocaleDateString()}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
+                            act.status === 'locked' ? 'bg-green-100 text-green-700' :
+                            act.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {act.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button className="text-blue-600 hover:underline font-medium">View</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
 
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
