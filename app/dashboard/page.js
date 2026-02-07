@@ -11,7 +11,8 @@ import {
   Plus, 
   CheckCircle, 
   Lock, 
-  Trash2 
+  Trash2,
+  Settings // <--- Added this import
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -126,6 +127,15 @@ export default function Dashboard() {
           >
             <BarChart className="h-5 w-5" />
             <span>Reports</span>
+          </button>
+
+          {/* Settings Link (ADDED HERE) */}
+          <button 
+            onClick={() => router.push('/dashboard/profile')}
+            className="flex items-center space-x-3 text-gray-300 hover:text-white hover:bg-gray-800 w-full p-3 rounded-lg transition"
+          >
+            <Settings className="h-5 w-5" />
+            <span>Settings</span>
           </button>
 
         </nav>
