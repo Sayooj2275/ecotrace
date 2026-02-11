@@ -137,7 +137,6 @@ export default function HandlerDashboard() {
     setVerifying(false)
   }
 
-  // 🟢 UPDATED: Saves File Path to DB
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -145,38 +144,25 @@ export default function HandlerDashboard() {
     setUploading(true)
     const fileName = `${userId}/${Date.now()}_${file.name}`
     
-    // 1. Upload to Storage
-    const { error: uploadError } = await supabase.storage
-      .from('handler_docs')
-      .upload(fileName, file)
-
+    const { error: uploadError } = await supabase.storage.from('handler_docs').upload(fileName, file)
     if (uploadError) {
       alert("Storage Error: " + uploadError.message)
       setUploading(false)
       return
     }
 
-    // 2. Save Path to Database (Now including file_path)
     const { error: dbError } = await supabase
       .from('handler_documents')
-      .insert([{ 
-          user_id: userId, 
-          name: file.name, 
-          type: 'PDF', 
-          status: 'Verified', // Auto-set to verified/done
-          file_path: fileName // 🟢 Saving the path
-      }])
+      .insert([{ user_id: userId, name: file.name, type: 'PDF', status: 'Verified', file_path: fileName }])
     
-    if (dbError) {
-        alert("Database Error: " + dbError.message)
-    } else {
+    if (dbError) alert("Database Error: " + dbError.message)
+    else {
         alert("Document Uploaded Successfully!")
         fetchData()
     }
     setUploading(false)
   }
 
-  // 🟢 NEW: Open Document Logic
   const openDocument = (path) => {
       if (!path) {
           alert("Error: File path not found for this document.")
@@ -271,18 +257,34 @@ export default function HandlerDashboard() {
     const totalWeight = history.reduce((sum, item) => sum + (item.collected_weight || 0), 0)
     const uniqueClients = [...new Set(history.map(item => item.profiles?.org_name))].length
 
+    // 🟢 FUNCTION: Trigger Download
+    const handleDownload = () => {
+        window.print()
+    }
+
     return (
-      <div className="min-h-screen bg-gray-50 p-8 font-sans text-gray-800 absolute inset-0 overflow-y-auto">
-        <div className="max-w-5xl mx-auto mb-6">
+      // 🟢 print:bg-white print:p-0 makes the background white and removes padding when printing
+      <div className="min-h-screen bg-gray-50 p-8 font-sans text-gray-800 absolute inset-0 overflow-y-auto print:bg-white print:p-0 print:static print:z-50">
+        
+        {/* 🟢 print:hidden hides header buttons */}
+        <div className="max-w-5xl mx-auto mb-6 print:hidden">
             <div className="flex justify-between items-end">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Collection Operations Reports</h1>
                     <p className="text-gray-500 mt-1">Generate verified waste recovery documentation.</p>
                 </div>
-                <button className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-800 transition shadow-sm shadow-green-900/10"><Download className="h-4 w-4" /> Download PDF</button>
+                {/* 🟢 onClick added */}
+                <button 
+                    onClick={handleDownload}
+                    className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-800 transition shadow-sm shadow-green-900/10"
+                >
+                    <Download className="h-4 w-4" /> Download PDF
+                </button>
             </div>
         </div>
-        <div className="max-w-5xl mx-auto bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-8 flex flex-wrap gap-4 items-end">
+
+        {/* 🟢 print:hidden hides filters */}
+        <div className="max-w-5xl mx-auto bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-8 flex flex-wrap gap-4 items-end print:hidden">
             <div className="flex-1">
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Report Month</label>
                 <div className="relative">
@@ -292,11 +294,15 @@ export default function HandlerDashboard() {
             </div>
             <button className="bg-gray-900 text-white px-8 py-3 rounded-lg font-bold hover:bg-gray-800 transition">Generate Report</button>
         </div>
-        <div className="max-w-4xl mx-auto bg-white shadow-xl border border-gray-100 min-h-[1000px] p-12 relative text-left">
+
+        {/* 📄 REPORT PAPER */}
+        {/* 🟢 print:shadow-none print:border-none cleans up the paper look */}
+        <div className="max-w-4xl mx-auto bg-white shadow-xl border border-gray-100 min-h-[1000px] p-12 relative text-left print:shadow-none print:border-none print:w-full print:max-w-none print:p-8">
             <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6"><div><h2 className="text-3xl font-bold text-gray-900">{selectedMonth} Collection Report</h2><p className="text-gray-500 mt-2">Generated for Handler ID: <span className="font-bold text-gray-900">{userId?.split('-')[0] || 'Unknown'}</span></p></div><div className="text-right"><p className="text-sm text-gray-400">Date: {reportDate}</p><p className="text-sm text-gray-400">Report ID: #{reportId}</p></div></div>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-8 text-xs text-gray-500 leading-relaxed flex gap-3"><AlertCircle className="h-4 w-4 shrink-0 text-gray-400" /><p>This report is an EcoTrace-generated verification record of waste collection activities. It serves as proof of recovery for EPR compliance and audit purposes. EcoTrace facilitates the data recording but does not act as the certifying authority.</p></div>
-            <div className="grid grid-cols-3 gap-4 mb-10"><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm"><p className="text-xs font-bold text-gray-400 uppercase">Total Pickups</p><p className="text-2xl font-bold text-gray-900">{totalPickups}</p></div><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm"><p className="text-xs font-bold text-gray-400 uppercase">Clients Served</p><p className="text-2xl font-bold text-blue-700">{uniqueClients}</p></div><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm"><p className="text-xs font-bold text-gray-400 uppercase">Total Weight</p><p className="text-2xl font-bold text-green-700">{totalWeight} kg</p></div></div>
-            <div className="overflow-hidden mb-10"><table className="w-full text-left"><thead className="border-b-2 border-gray-100"><tr><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Client (Institution)</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Category</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Weight</th></tr></thead><tbody className="divide-y divide-gray-50">{history.map((item) => (<tr key={item.id} className="group hover:bg-gray-50 transition"><td className="py-4 text-sm font-medium text-gray-500">{new Date(item.created_at).toLocaleDateString()}</td><td className="py-4 text-sm font-bold text-gray-800">{item.profiles?.org_name}</td><td className="py-4 text-sm text-gray-500">{item.type}</td><td className="py-4 text-right font-mono text-green-700 font-bold">{item.collected_weight} kg</td></tr>))}</tbody></table></div>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-8 text-xs text-gray-500 leading-relaxed flex gap-3 print:bg-gray-100"><AlertCircle className="h-4 w-4 shrink-0 text-gray-400" /><p>This report is an EcoTrace-generated verification record of waste collection activities. It serves as proof of recovery for EPR compliance and audit purposes. EcoTrace facilitates the data recording but does not act as the certifying authority.</p></div>
+            <div className="grid grid-cols-3 gap-4 mb-10"><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm print:border-gray-300"><p className="text-xs font-bold text-gray-400 uppercase">Total Pickups</p><p className="text-2xl font-bold text-gray-900">{totalPickups}</p></div><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm print:border-gray-300"><p className="text-xs font-bold text-gray-400 uppercase">Clients Served</p><p className="text-2xl font-bold text-blue-700">{uniqueClients}</p></div><div className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm print:border-gray-300"><p className="text-xs font-bold text-gray-400 uppercase">Total Weight</p><p className="text-2xl font-bold text-green-700">{totalWeight} kg</p></div></div>
+            <div className="overflow-hidden mb-10"><table className="w-full text-left"><thead className="border-b-2 border-gray-100"><tr><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Client (Institution)</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Category</th><th className="py-3 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Weight</th></tr></thead><tbody className="divide-y divide-gray-50">{history.map((item) => (<tr key={item.id} className="group hover:bg-gray-50 transition print:break-inside-avoid"><td className="py-4 text-sm font-medium text-gray-500">{new Date(item.created_at).toLocaleDateString()}</td><td className="py-4 text-sm font-bold text-gray-800">{item.profiles?.org_name}</td><td className="py-4 text-sm text-gray-500">{item.type}</td><td className="py-4 text-right font-mono text-green-700 font-bold">{item.collected_weight} kg</td></tr>))}</tbody></table></div>
+            <div className="absolute bottom-12 left-12 right-12 border-t border-gray-100 pt-6 flex justify-between items-center text-xs text-gray-400"><p>Generated by EcoTrace • Verified Handler Record</p><p>Page 1 of 1</p></div>
         </div>
       </div>
     )
@@ -353,7 +359,7 @@ export default function HandlerDashboard() {
     )
   }
 
-  // 🟢 UPDATED: Documents View (Clean & Functional)
+  // Documents View
   const DocumentsView = () => (
       <div className="space-y-6 animate-in slide-in-from-right-4">
           <div className="flex justify-between items-center">
@@ -373,7 +379,6 @@ export default function HandlerDashboard() {
                               <p className="text-xs text-gray-400">Uploaded on {new Date(doc.created_at).toLocaleDateString()}</p>
                           </div>
                       </div>
-                      {/* 🟢 REMOVED PENDING STATUS & FIXED OPEN BUTTON */}
                       <button 
                         onClick={() => openDocument(doc.file_path)} 
                         className="text-gray-400 hover:text-white p-2 bg-gray-900 rounded-lg hover:bg-green-600 transition"
@@ -422,8 +427,8 @@ export default function HandlerDashboard() {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (<div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>)}
 
-      {/* Sidebar Navigation */}
-      <aside className={`fixed md:static inset-y-0 left-0 w-64 bg-gray-950 border-r border-gray-800 p-6 flex flex-col justify-between transform transition-transform z-50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      {/* 🟢 Sidebar Navigation - print:hidden added here */}
+      <aside className={`fixed md:static inset-y-0 left-0 w-64 bg-gray-950 border-r border-gray-800 p-6 flex flex-col justify-between transform transition-transform z-50 print:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
             <div className="flex items-center justify-between mb-10">
                 <h1 className="text-2xl font-bold text-green-500 flex items-center gap-2"><Leaf className="h-6 w-6" /> EcoTrace</h1>
@@ -443,11 +448,14 @@ export default function HandlerDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto h-screen">
-        <div className="md:hidden bg-gray-950 p-4 flex items-center justify-between border-b border-gray-800 sticky top-0 z-30">
+        {/* 🟢 Mobile Header - print:hidden added here */}
+        <div className="md:hidden bg-gray-950 p-4 flex items-center justify-between border-b border-gray-800 sticky top-0 z-30 print:hidden">
             <h1 className="text-xl font-bold text-green-500">EcoTrace Handler</h1>
             <button onClick={() => setIsSidebarOpen(true)} className="text-gray-300"><Menu /></button>
         </div>
-        <div className={activeView === 'reports' ? "w-full h-full p-0" : "p-6 md:p-10 max-w-4xl mx-auto"}>
+        
+        {/* 🟢 Main Wrapper: Added print:w-full print:p-0 */}
+        <div className={activeView === 'reports' ? "w-full h-full p-0 print:w-full print:p-0" : "p-6 md:p-10 max-w-4xl mx-auto"}>
             {loading ? <p className="text-gray-500 text-center mt-10">Loading EcoTrace...</p> : (
                 <>
                     {activeView === 'dashboard' && <DashboardView />}
