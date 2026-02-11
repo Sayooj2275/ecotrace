@@ -3,86 +3,77 @@ import { useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Leaf, Lock, User } from 'lucide-react'
+import { Leaf, Lock, User, ArrowLeft } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-export default function LoginPage() {
+export default function Login() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    if (authError) {
-      setError("Invalid login credentials")
+    if (error) {
+      alert('Login Failed: ' + error.message)
       setLoading(false)
-      return
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .single()
-
-    if (profileError || !profile) {
-      router.push('/')
-      return
-    }
-
-    if (profile.role === 'institution') {
-      router.push('/dashboard')
-    } else if (profile.role === 'handler') {
-      router.push('/handler/dashboard')
     } else {
-      router.push('/')
+      // Check role to redirect correctly
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+      
+      if (profile?.role === 'handler') {
+        router.push('/handler/dashboard')
+      } else {
+        router.push('/dashboard')
+      }
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8 border border-gray-100">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      
+      {/* 🟢 NEW: Back Button */}
+      <div className="w-full max-w-md mb-6">
+        <Link href="/" className="flex items-center text-gray-500 hover:text-green-700 transition font-medium">
+            <ArrowLeft className="h-5 w-5 mr-2" /> Back to Home
+        </Link>
+      </div>
+
+      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-100">
+        
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-3">
-            <div className="bg-green-100 p-3 rounded-full">
-              <Leaf className="h-8 w-8 text-green-600" />
-            </div>
+          <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Leaf className="h-8 w-8 text-green-600" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">EcoTrace</h1>
-          <p className="text-gray-500 mt-2">Sustainability Compliance Platform</p>
+          <h1 className="text-2xl font-bold text-gray-800">EcoTrace</h1>
+          <p className="text-gray-500 text-sm mt-1">Sustainability Compliance Platform</p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-100 flex items-center text-sm">
-            <Lock className="h-4 w-4 mr-2" />
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-5">
+          
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
             <div className="relative">
               <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              {/* Added text-gray-900 and bg-white specifically here */}
-              <input
-                type="email"
+              <input 
+                type="email" 
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition text-gray-900 bg-white"
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition bg-gray-50 focus:bg-white"
                 placeholder="admin@college.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -91,36 +82,33 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              {/* Added text-gray-900 and bg-white specifically here */}
-              <input
-                type="password"
+              <input 
+                type="password" 
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition text-gray-900 bg-white"
-                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition bg-gray-50 focus:bg-white"
+                placeholder="••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
           </div>
 
-          <button
-            type="submit"
+          <button 
             disabled={loading}
-            className="w-full py-3 px-4 bg-green-700 hover:bg-green-800 text-white font-bold rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-green-700 text-white font-bold py-3 rounded-lg hover:bg-green-800 transition shadow-md disabled:opacity-50"
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? 'Signing In...' : 'Sign In'}
           </button>
+
         </form>
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Don't have an account?{' '}
-          <Link href="/signup" className="font-semibold text-green-600 hover:text-green-800 hover:underline">
-            Create an Institution Profile
-          </Link>
+        <div className="mt-6 text-center text-sm text-gray-500">
+          Don't have an account? <Link href="/signup" className="text-green-700 font-bold hover:underline">Create an Institution Profile</Link>
         </div>
+
       </div>
     </div>
   )

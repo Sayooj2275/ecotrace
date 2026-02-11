@@ -25,6 +25,8 @@ export default function MyDocuments() {
 
   async function loadDocs() {
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
     const { data } = await supabase.from('handler_documents').select('*').eq('user_id', user.id)
     if (data) setDocs(data)
     setLoading(false)
@@ -39,23 +41,35 @@ export default function MyDocuments() {
     
     // 1. Upload File
     const fileName = `${user.id}/${Date.now()}_${file.name}`
-    const { error: uploadError } = await supabase.storage.from('handler-docs').upload(fileName, file)
+    
+    // 🔴 FIX: Changed 'handler-docs' to 'documents' to match your SQL Script
+    const { error: uploadError } = await supabase.storage
+      .from('documents') 
+      .upload(fileName, file)
     
     if (uploadError) {
-      alert("Upload failed!")
+      console.error("Upload Error:", uploadError)
+      alert("Upload failed! " + uploadError.message)
       setUploading(false)
       return
     }
 
     // 2. Get URL
-    const { data: urlData } = supabase.storage.from('handler-docs').getPublicUrl(fileName)
+    // 🔴 FIX: Changed 'handler-docs' to 'documents' here too
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(fileName)
 
     // 3. Save to DB
-    await supabase.from('handler_documents').insert({
+    const { error: dbError } = await supabase.from('handler_documents').insert({
       user_id: user.id,
       title: title,
       file_url: urlData.publicUrl
     })
+
+    if (dbError) {
+        alert('File uploaded but database save failed: ' + dbError.message)
+    }
 
     // Reset
     setTitle('')
@@ -75,7 +89,7 @@ export default function MyDocuments() {
       
       {/* Header */}
       <div className="flex items-center mb-8">
-        <button onClick={() => router.back()} className="mr-4 bg-white p-2 rounded-full shadow-sm text-gray-500 hover:text-gray-800">
+        <button onClick={() => router.back()} className="mr-4 bg-white p-2 rounded-full shadow-sm text-gray-500 hover:text-gray-800 transition">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <h1 className="text-2xl font-bold text-gray-900">My Certificates</h1>
@@ -90,9 +104,10 @@ export default function MyDocuments() {
           <div>
             <label className="text-xs font-bold text-gray-400 uppercase">Document Name</label>
             <input 
+              required
               type="text" 
               placeholder="e.g. Driving License, Pollution Permit"
-              className="w-full p-3 border border-gray-200 rounded-lg outline-none focus:border-green-500 mt-1"
+              className="w-full p-3 border border-gray-200 rounded-lg outline-none focus:border-green-500 mt-1 transition"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -100,12 +115,16 @@ export default function MyDocuments() {
           <div>
             <label className="text-xs font-bold text-gray-400 uppercase">File</label>
             <input 
+              required
               type="file" 
-              className="w-full mt-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+              className="w-full mt-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 transition"
               onChange={(e) => setFile(e.target.files[0])}
             />
           </div>
-          <button disabled={uploading || !file} className="w-full bg-black text-white font-bold py-3 rounded-lg disabled:opacity-50">
+          <button 
+            disabled={uploading || !file} 
+            className="w-full bg-black text-white font-bold py-3 rounded-lg disabled:opacity-50 hover:bg-gray-800 transition"
+          >
             {uploading ? 'Uploading...' : 'Save Document'}
           </button>
         </form>
@@ -114,10 +133,12 @@ export default function MyDocuments() {
       {/* Documents List */}
       <div className="space-y-3">
         {loading ? <p className="text-center text-gray-400">Loading...</p> : docs.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm">No documents uploaded yet.</p>
+          <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-200">
+             <p className="text-gray-400">No documents uploaded yet.</p>
+          </div>
         ) : (
           docs.map(doc => (
-            <div key={doc.id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border-l-4 border-blue-500">
+            <div key={doc.id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border-l-4 border-blue-500 hover:shadow-md transition">
               <div className="flex items-center">
                 <div className="bg-blue-50 p-2 rounded-lg mr-3">
                   <FileText className="h-6 w-6 text-blue-600" />
@@ -128,10 +149,10 @@ export default function MyDocuments() {
                 </div>
               </div>
               <div className="flex space-x-2">
-                <a href={doc.file_url} target="_blank" className="p-2 text-gray-400 hover:text-blue-600">
+                <a href={doc.file_url} target="_blank" className="p-2 text-gray-400 hover:text-blue-600 transition">
                   <Eye className="h-5 w-5" />
                 </a>
-                <button onClick={() => handleDelete(doc.id)} className="p-2 text-gray-400 hover:text-red-600">
+                <button onClick={() => handleDelete(doc.id)} className="p-2 text-gray-400 hover:text-red-600 transition">
                   <Trash2 className="h-5 w-5" />
                 </button>
               </div>

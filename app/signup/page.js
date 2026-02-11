@@ -3,167 +3,176 @@ import { useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, Truck } from 'lucide-react'
 
-// Connect to Supabase
+// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-export default function SignupPage() {
+export default function Signup() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [role, setRole] = useState('institution')
-  const [orgName, setOrgName] = useState('')
-  const [city, setCity] = useState('')
+  const [role, setRole] = useState('institution') // Default to institution
+  const [formData, setFormData] = useState({
+    org_name: '',
+    phone: '',
+    city: '',
+    email: '',
+    password: ''
+  })
 
-  const handleSignup = async (e) => {
+  async function handleSignup(e) {
     e.preventDefault()
     setLoading(true)
-    setError(null)
 
-    // 1. Create User
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
+    // 1. Sign up and pass the SELECTED ROLE
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          org_name: formData.org_name,
+          city: formData.city,
+          phone: formData.phone,
+          role: role // <--- Sending the selected role (institution OR handler)
+        }
+      }
     })
 
-    if (authError) {
-      setError(authError.message)
+    if (error) {
+      console.error("Signup Error:", error)
+      alert('Signup Error: ' + error.message)
       setLoading(false)
       return
     }
 
-    if (authData.user) {
-      // 2. Create Profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: authData.user.id,
-            role: role,
-            org_name: orgName,
-            city: city,
-          }
-        ])
-
-      if (profileError) {
-        setError(profileError.message)
-        setLoading(false)
-      } else {
-        alert("Account created successfully! Please log in.")
-        router.push('/login')
-      }
-    }
+    // 2. Success
+    alert('Account Created Successfully! Please Log In.')
+    await supabase.auth.signOut() 
+    router.push('/login')
+    setLoading(false)
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-xl border border-gray-100">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-100">
         
-        <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900">Sign Up</h2>
-          <p className="mt-2 text-sm text-gray-600">Create your EcoTrace profile</p>
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Join EcoTrace</h1>
+          <p className="text-gray-500">Create your account</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-700 p-3 rounded text-sm text-center border border-red-200">
-            {error}
-          </div>
-        )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleSignup}>
-          
-          {/* Role Selection */}
-          <div className="grid grid-cols-2 gap-4">
-            <div 
-              onClick={() => setRole('institution')}
-              className={`cursor-pointer border rounded-lg p-4 flex flex-col items-center justify-center transition-all ${role === 'institution' ? 'border-green-500 bg-green-50 ring-2 ring-green-500' : 'border-gray-200 hover:border-green-300'}`}
-            >
-              <Building2 className={`h-8 w-8 mb-2 ${role === 'institution' ? 'text-green-600' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${role === 'institution' ? 'text-green-700' : 'text-gray-500'}`}>Institution</span>
-            </div>
-
-            <div 
-              onClick={() => setRole('handler')}
-              className={`cursor-pointer border rounded-lg p-4 flex flex-col items-center justify-center transition-all ${role === 'handler' ? 'border-green-500 bg-green-50 ring-2 ring-green-500' : 'border-gray-200 hover:border-green-300'}`}
-            >
-              <Truck className={`h-8 w-8 mb-2 ${role === 'handler' ? 'text-green-600' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${role === 'handler' ? 'text-green-700' : 'text-gray-500'}`}>Waste Handler</span>
-            </div>
-          </div>
-
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-              <input
-                type="email"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="admin@college.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {role === 'institution' ? 'Institution Name' : 'Handler Company Name'}
-              </label>
-              <input
-                type="text"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder={role === 'institution' ? "e.g. Springfield University" : "e.g. City Recyclers Ltd"}
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-              <input
-                type="text"
-                required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="e.g. Kochi"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
-            </div>
-          </div>
-
+        {/* --- ROLE SELECTOR --- */}
+        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
           <button
-            type="submit"
-            disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+            type="button"
+            onClick={() => setRole('institution')}
+            className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${
+              role === 'institution' 
+                ? 'bg-white text-green-700 shadow-sm' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
           >
-            {loading ? 'Creating Account...' : 'Create Account'}
+            🏫 Institution
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('handler')}
+            className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${
+              role === 'handler' 
+                ? 'bg-white text-blue-700 shadow-sm' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🚛 Waste Handler
+          </button>
+        </div>
+
+        <form onSubmit={handleSignup} className="space-y-4">
+          
+          {/* Dynamic Label based on Role */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              {role === 'institution' ? 'Organization Name' : 'Agency / Handler Name'}
+            </label>
+            <input 
+              required
+              type="text"
+              placeholder={role === 'institution' ? "e.g. Green Valley School" : "e.g. City Waste Soltuions"}
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+              value={formData.org_name}
+              onChange={(e) => setFormData({...formData, org_name: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Phone Number</label>
+            <input 
+              required
+              type="tel"
+              placeholder="e.g. 9876543210"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">City / Location</label>
+            <input 
+              required
+              type="text"
+              placeholder="e.g. Kochi"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+              value={formData.city}
+              onChange={(e) => setFormData({...formData, city: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
+            <input 
+              required
+              type="email"
+              placeholder="email@example.com"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
+            <input 
+              required
+              type="password"
+              placeholder="••••••••"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+            />
+          </div>
+
+          <button 
+            disabled={loading}
+            className={`w-full text-white font-bold py-3 rounded-lg transition transform active:scale-95 shadow-md flex justify-center items-center ${
+              role === 'institution' ? 'bg-green-700 hover:bg-green-800' : 'bg-blue-700 hover:bg-blue-800'
+            }`}
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">Creating Account...</span>
+            ) : (
+              <span>Sign Up as {role === 'institution' ? 'Institution' : 'Handler'} →</span>
+            )}
           </button>
 
-          <div className="text-center text-sm">
-            <Link href="/login" className="font-medium text-green-600 hover:text-green-500">
-              Already have an account? Sign in
-            </Link>
-          </div>
         </form>
+
+        <div className="mt-6 text-center text-sm text-gray-500">
+          Already have an account? <Link href="/login" className="text-green-700 font-bold hover:underline">Log in</Link>
+        </div>
+
       </div>
     </div>
   )

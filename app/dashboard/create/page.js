@@ -1,196 +1,161 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Calendar, User, Camera, CheckCircle } from 'lucide-react'
+import { Truck, AlertCircle, FileText } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-export default function CreateActivity() {
+const WASTE_CATEGORIES = [
+  { id: 'Plastic', label: 'Plastic', emoji: '🥤' },
+  { id: 'Paper', label: 'Paper', emoji: '📄' },
+  { id: 'E-Waste', label: 'E-Waste', emoji: '🔌' },
+  { id: 'Bio', label: 'Bio / Organic', emoji: '🍏' },
+  { id: 'Metal', label: 'Metal', emoji: '⚙️' },
+  { id: 'Glass', label: 'Glass', emoji: '🍾' },
+  { id: 'Textile', label: 'Textile', emoji: '👕' },
+  { id: 'Hazardous', label: 'Hazardous', emoji: '⚠️' }
+]
+
+export default function CreateRequest() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  
-  // Clean Form State
   const [formData, setFormData] = useState({
-    type: '', 
-    description: '',
-    date: new Date().toISOString().split('T')[0], // Default to today
-    responsible_person: ''
+    type: 'Plastic',
+    weight: '',
+    description: '' // 🟢 Added Description State
   })
-  const [file, setFile] = useState(null)
 
-  const handleSubmit = async () => {
-    // Check for empty fields
-    if (!formData.type || !formData.description || !formData.responsible_person) {
-        return alert("Please fill in all the details.")
-    }
+  // Auto-Generate 4-Digit OTP
+  const [otp] = useState(Math.floor(1000 + Math.random() * 9000).toString())
+
+  async function handleSubmit(e) {
+    e.preventDefault()
     setLoading(true)
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return router.push('/login')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return router.push('/login')
 
-      let evidenceUrl = null
+    // 1. Create Activity
+    const expiryTime = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
-      // 1. Upload Photo Proof (Optional)
-      if (file) {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Date.now()}.${fileExt}`
-        
-        // Safety check: Create bucket if missing
-        await supabase.storage.createBucket('activity-evidence', { public: true }).catch(() => {})
-
-        const { error: uploadError } = await supabase.storage
-          .from('activity-evidence')
-          .upload(fileName, file)
-
-        if (uploadError) throw uploadError
-        evidenceUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/activity-evidence/${fileName}`
-      }
-
-      // 2. Save Activity to Database
-      const { error } = await supabase.from('activities').insert({
+    const { data: activity, error: actError } = await supabase
+      .from('activities')
+      .insert([{
         institution_id: user.id,
         type: formData.type,
-        description: formData.description,
-        date: formData.date,
-        responsible_person: formData.responsible_person,
-        evidence_url: evidenceUrl,
-        
-        // --- CRITICAL CHANGE ---
-        // Status is 'locked' (Verified) immediately. 
-        // No "Pending" state because no driver is needed.
-        status: 'locked' 
-      })
+        weight: formData.weight,
+        description: formData.description, // 🟢 Save Description
+        status: 'open',
+        expires_at: expiryTime,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .single()
 
-      if (error) throw error
-
-      alert("Activity Recorded Successfully!")
-      router.push('/dashboard')
-
-    } catch (error) {
-      alert("Error: " + error.message)
-    } finally {
+    if (actError) {
+      alert('Error: ' + actError.message)
       setLoading(false)
+      return
     }
+
+    // 2. Save OTP
+    const { error: otpError } = await supabase
+      .from('waste_logs')
+      .insert([{
+        activity_id: activity.id,
+        otp_code: otp,
+        verified: false
+      }])
+
+    if (!otpError) {
+      router.push('/dashboard')
+    }
+    setLoading(false)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10">
-      
-      <div className="w-full max-w-2xl bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-green-700 p-6 flex items-center text-white">
-            <button onClick={() => router.back()} className="mr-4 hover:bg-green-600 p-2 rounded-full transition">
-                <ArrowLeft className="h-6 w-6" />
-            </button>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-100 animate-in zoom-in-95">
+        <div className="flex items-center gap-3 mb-6">
+            <div className="bg-green-100 p-3 rounded-full"><Truck className="h-6 w-6 text-green-700" /></div>
             <div>
-                <h1 className="text-xl font-bold">Log General Activity</h1>
-                <p className="text-green-100 text-sm">Internal audits, seminars, and initiatives</p>
+                <h1 className="text-2xl font-bold text-gray-800">Request Pickup</h1>
+                <p className="text-sm text-gray-500">Handlers nearby will be notified instantly.</p>
             </div>
         </div>
 
-        {/* Form Body */}
-        <div className="p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          
+          {/* 1. Category */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-3">Select Waste Category</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {WASTE_CATEGORIES.map(cat => (
+                    <button 
+                        key={cat.id} type="button"
+                        onClick={() => setFormData({...formData, type: cat.id})}
+                        className={`p-4 rounded-xl font-bold text-sm border-2 transition flex flex-col items-center gap-2 ${
+                            formData.type === cat.id 
+                            ? 'border-green-500 bg-green-50 text-green-700 shadow-sm' 
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                        <span className="text-2xl">{cat.emoji}</span>
+                        {cat.label}
+                    </button>
+                ))}
+            </div>
+          </div>
 
-            {/* 1. Activity Heading */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 2. Weight */}
             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Activity Heading</label>
-                <input 
-                    type="text" 
-                    className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:ring-2 focus:ring-green-500 outline-none"
-                    placeholder="e.g. Annual Energy Audit / Zero Waste Seminar"
-                    value={formData.type}
-                    onChange={(e) => setFormData({...formData, type: e.target.value})}
-                />
+                <label className="block text-sm font-bold text-gray-700 mb-2">Estimated Weight</label>
+                <div className="relative">
+                    <input 
+                    type="number" required
+                    className="w-full p-4 pl-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-mono text-lg"
+                    placeholder="e.g. 15"
+                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                    />
+                    <span className="absolute right-4 top-4 text-gray-400 font-bold">KG</span>
+                </div>
             </div>
 
-            {/* 2. Description */}
+            {/* 3. Description (New) */}
             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
-                <textarea 
-                    rows="3"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:ring-2 focus:ring-green-500 outline-none"
-                    placeholder="Details about the event or initiative..."
-                    value={formData.description}
+                <label className="block text-sm font-bold text-gray-700 mb-2">Description (Optional)</label>
+                <div className="relative">
+                    <textarea 
+                    rows={1}
+                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none resize-none"
+                    placeholder="e.g. Bottles, PC parts..."
                     onChange={(e) => setFormData({...formData, description: e.target.value})}
-                />
-            </div>
-
-            {/* 3. Date & Person */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                        <Calendar className="inline h-4 w-4 mr-1 text-gray-500"/> Date
-                    </label>
-                    <input 
-                        type="date" 
-                        className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:ring-2 focus:ring-green-500 outline-none"
-                        value={formData.date}
-                        onChange={(e) => setFormData({...formData, date: e.target.value})}
                     />
-                </div>
-                <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                        <User className="inline h-4 w-4 mr-1 text-gray-500"/> Person In Charge
-                    </label>
-                    <input 
-                        type="text" 
-                        className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:ring-2 focus:ring-green-500 outline-none"
-                        placeholder="e.g. Dr. A. Kumar"
-                        value={formData.responsible_person}
-                        onChange={(e) => setFormData({...formData, responsible_person: e.target.value})}
-                    />
+                    <FileText className="absolute right-4 top-4 h-5 w-5 text-gray-400" />
                 </div>
             </div>
+          </div>
 
-            {/* 4. Photo Proof Upload */}
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer relative">
-                <input 
-                    type="file" 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    onChange={(e) => setFile(e.target.files[0])}
-                    accept="image/*"
-                />
-                <div className="flex flex-col items-center justify-center space-y-2">
-                    {file ? (
-                        <>
-                            <CheckCircleIcon className="h-10 w-10 text-green-500" />
-                            <span className="text-green-700 font-bold">{file.name}</span>
-                        </>
-                    ) : (
-                        <>
-                            <div className="bg-green-100 p-3 rounded-full text-green-600">
-                                <Camera className="h-6 w-6" />
-                            </div>
-                            <span className="text-gray-500 font-medium">Click to upload Event Photo</span>
-                            <span className="text-xs text-gray-400">(Optional Evidence)</span>
-                        </>
-                    )}
-                </div>
-            </div>
+          {/* Notice */}
+          <div className="bg-blue-50 p-4 rounded-xl flex gap-3 text-sm text-blue-700 border border-blue-100">
+             <AlertCircle className="h-5 w-5 shrink-0" />
+             <p>This request will be broadcast to handlers in your area. It will expire automatically in 60 minutes if not accepted.</p>
+          </div>
 
-            {/* Submit Button */}
-            <button 
-                onClick={handleSubmit}
-                disabled={loading}
-                className="w-full bg-green-700 text-white font-bold py-4 rounded-lg hover:bg-green-800 transition shadow-md flex justify-center items-center"
-            >
-                {loading ? 'Saving...' : 'Save as Complete'}
-            </button>
-
-        </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-800 transition shadow-lg shadow-green-200 disabled:opacity-50 transform active:scale-[0.98]"
+          >
+            {loading ? 'Broadcasting...' : 'Broadcast Request'}
+          </button>
+        </form>
       </div>
     </div>
   )
-}
-
-function CheckCircleIcon(props) {
-    return (
-        <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-    )
 }
